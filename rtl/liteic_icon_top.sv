@@ -1,371 +1,430 @@
-
+// —————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+// ———————————————————————————————————————————————————————————————————————————————————— liteic_icon_top
+// —————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
 module liteic_icon_top
-    import liteic_pkg::IC_NUM_MASTER_SLOTS;
-    import liteic_pkg::IC_NUM_SLAVE_SLOTS;
-    import liteic_pkg::AXI_ADDR_WIDTH;
-    import liteic_pkg::AXI_DATA_WIDTH;
-    import liteic_pkg::AXI_RESP_WIDTH;
-    import liteic_pkg::IC_ARADDR_WIDTH;
-    import liteic_pkg::IC_RDATA_WIDTH;
-    import liteic_pkg::IC_AWADDR_WIDTH;
-    import liteic_pkg::IC_WDATA_WIDTH;
-    import liteic_pkg::IC_BRESP_WIDTH;
-    import liteic_pkg::IC_RD_CONNECTIVITY;
-    import liteic_pkg::IC_WR_CONNECTIVITY;
-    import liteic_pkg::IC_SLAVE_REGION_BASE;
-    import liteic_pkg::IC_SLAVE_REGION_SIZE;
+	import liteic_pkg::IC_NUM_MASTER_SLOTS						;
+	import liteic_pkg::IC_NUM_SLAVE_SLOTS						;
+	import liteic_pkg::AXI_ADDR_WIDTH							;
+	import liteic_pkg::AXI_DATA_WIDTH							;
+	import liteic_pkg::AXI_RESP_WIDTH							;
+	import liteic_pkg::IC_ARADDR_WIDTH							;
+	import liteic_pkg::IC_RDATA_WIDTH							;
+	import liteic_pkg::IC_AWADDR_WIDTH							;
+	import liteic_pkg::IC_WDATA_WIDTH							;
+	import liteic_pkg::IC_BRESP_WIDTH							;
+	import liteic_pkg::IC_RD_CONNECTIVITY						;
+	import liteic_pkg::IC_WR_CONNECTIVITY						;
+	import liteic_pkg::IC_SLAVE_REGION_BASE						;
+	import liteic_pkg::IC_SLAVE_REGION_SIZE						;
 (
-    input logic         clk_i,
-    input logic         rstn_i,
-
-    // axil interfaces
-    axi_lite_if.sp      mst_axil [ IC_NUM_MASTER_SLOTS ],
-    axi_lite_if.mp      slv_axil [ IC_NUM_SLAVE_SLOTS  ]
+	input logic					clk_i							,
+	input logic					rstn_i							,
+	axi_lite_if.sp				mst_axil[IC_NUM_MASTER_SLOTS]	,
+	axi_lite_if.mp				slv_axil[IC_NUM_SLAVE_SLOTS]
 );
+// —————————————————————————————————————————————————————————————
+// ————————————— internal
+// —————————————————————————————————————————————————————————————
+wire clk					  =	clk_i							;
+wire rst					  =	rstn_i							;
+axi_lite_if #(32, 32, 2)		m[20]						  ();
+axi_lite_if #(32, 32, 2)		s[12]						  ();
+// —————————————————————————————————————————————————————————————
+// ————————————— mnr
+// —————————————————————————————————————————————————————————————
+struct															{
+// additional
+	logic	[11:0]				ar_ready						;
+	logic	[19:0]				ar_valid						;
+	logic	[19:0]				r_ready							;
+	logic	[11:0]				r_valid							;
+	logic	[31:0]				ar_addr					  [19:0];
+	logic	[3:0]				ar_qos					  [19:0];
+	logic	[31:0]				r_data					  [11:0];
+	logic	[1:0]				r_resp					  [11:0];
+// main
+	logic	[4:0]				msel 							;
+	logic	[4:0]				msel_r 							;
+	logic	[3:0]				ssel							;
+	logic	[3:0]				ssel_r							;
+	logic	[31:0]				addr 							;
+	logic	[31:0]				data 							;
+	logic	[1:0]				resp 							;
+	logic						busy							;
+	logic						busy_r 							;
+} shared_read_0 												;
 
-//-------------------------------------------------------------------------------
-// functions
-//-------------------------------------------------------------------------------
-
-typedef bit [IC_NUM_SLAVE_SLOTS-1:0] connectivity_t [IC_NUM_MASTER_SLOTS];
-
-function [IC_NUM_MASTER_SLOTS-1:0] get_column(int column, connectivity_t matrix);
-    get_column = '0;
-    for (int mst_idx = 0; mst_idx < IC_NUM_MASTER_SLOTS; mst_idx++) begin
-        get_column[mst_idx] = matrix[mst_idx][column];
-    end
-endfunction
-
-function bit check_region_overlap(int i, int j);
-    check_region_overlap = 0;
-    // check for overlap of i-th region with j-th one
-    //  First check:    |  Second check:
-    //  [---j---]       |      [---j---]
-    //      [---i---]   |  [---i---]
-    // First check
-    if( ( IC_SLAVE_REGION_BASE[j] <= IC_SLAVE_REGION_BASE[i]                                                      ) &&
-        (                            IC_SLAVE_REGION_BASE[i] <= (IC_SLAVE_REGION_BASE[j]+IC_SLAVE_REGION_SIZE[j]-1) )
-    ) check_region_overlap = 1;
-
-    // Second check
-    if( ( IC_SLAVE_REGION_BASE[j] <= (IC_SLAVE_REGION_BASE[i]+IC_SLAVE_REGION_SIZE[i]-1)                            ) &&
-        (                            (IC_SLAVE_REGION_BASE[i]+IC_SLAVE_REGION_SIZE[i]-1) <= (IC_SLAVE_REGION_BASE[j]+IC_SLAVE_REGION_SIZE[j]-1) )
-    ) check_region_overlap = 1;
-endfunction
-
-//-------------------------------------------------------------------------------
-// parameters checking
-//-------------------------------------------------------------------------------
-
-generate // regions overlap check
-    for (genvar i = 0; i < IC_NUM_SLAVE_SLOTS; i++) begin
-        for (genvar j = 0; j < IC_NUM_SLAVE_SLOTS; j++) begin
-            if((i != j) && check_region_overlap(i, j)) begin : regions_overlap_check
-                //$error($sformatf("Found overlapping regions! Overlap between region #%0d and #%0d", i, j));
-                $error($sformatf("Found overlapping regions! Overlap between region #%0d[%0d:%0d] and #%0d[%0d:%0d]", i, IC_SLAVE_REGION_BASE[i], IC_SLAVE_REGION_BASE[i] + IC_SLAVE_REGION_SIZE[i],  j, IC_SLAVE_REGION_BASE[j], IC_SLAVE_REGION_BASE[j] + IC_SLAVE_REGION_SIZE[j]));
-
-            end
-        end
-    end
-endgenerate
-
-//-------------------------------------------------------------------------------
-// External decoding:
-//-------------------------------------------------------------------------------
-
-    logic [IC_NUM_SLAVE_SLOTS-1:0] rgn_select_aw [IC_NUM_MASTER_SLOTS]; // region select
-    logic [IC_NUM_SLAVE_SLOTS-1:0] rgn_select_ar [IC_NUM_MASTER_SLOTS]; // region select
-
-for (genvar m = 0; m < IC_NUM_MASTER_SLOTS; m++) begin : master_range_sel
-    for (genvar s = 0; s < IC_NUM_SLAVE_SLOTS; s++) begin : slave_range_sel
-        assign rgn_select_ar[m][s] = (mst_axil[m].ar_addr[23:20] == IC_SLAVE_REGION_BASE[s][23:20]) && (~|mst_axil[m].ar_addr[31:24]);
-        assign rgn_select_aw[m][s] = (mst_axil[m].aw_addr[23:20] == IC_SLAVE_REGION_BASE[s][23:20]) && (~|mst_axil[m].aw_addr[31:24]);
-    end
+for (genvar mi = 0; mi < 20; mi++) begin : shared_read_0_ar_valid$
+	assign shared_read_0.ar_addr[mi] = m[mi].ar_addr			;
+	assign shared_read_0.ar_valid[mi] = m[mi].ar_valid 			;
+	assign shared_read_0.r_ready[mi] = m[mi].r_ready 			;
+	assign shared_read_0.ar_qos[mi] = m[mi].ar_qos				;
+end
+for (genvar si = 0; si < 12; si++) begin : shared_read_0_ar_valid$$
+	assign shared_read_0.r_valid[si] = s[si].r_valid 			;
+	assign shared_read_0.ar_ready[si] = s[si].ar_ready 			;
+	assign shared_read_0.r_data[si] = s[si].r_data				;
+	assign shared_read_0.r_resp[si] = s[si].r_resp				;
 end
 
-    logic [IC_NUM_MASTER_SLOTS-1:0] illegal_addr_aw; // llegal address flag
-    logic [IC_NUM_MASTER_SLOTS-1:0] illegal_addr_ar; // llegal address flag
-
-for (genvar m = 0; m < IC_NUM_MASTER_SLOTS; m++) begin : master_range_ill
-    assign illegal_addr_aw[m] = ~|( rgn_select_aw[m] );
-    assign illegal_addr_ar[m] = ~|( rgn_select_ar[m] );
+always @(*) begin : shared_read_0_rqst_sel
+	shared_read_0.msel = '0										;
+	shared_read_0.ssel = '0										;
+	shared_read_0.busy = '0										;
+	for (int i = 0; i < 20; i = i + 1) begin : shared_red_0_rqst_gen
+		if (shared_read_0.ar_valid[i]) begin
+			shared_read_0.msel=	i								;
+			shared_read_0.ssel= shared_read_0.ar_addr[i][23:20]	;
+			shared_read_0.busy = '1								;
+			disable shared_read_0_rqst_sel						;
+		end
+	end
 end
 
-//-------------------------------------------------------------------------------
-// NODE AXIL Interfaces
-//-------------------------------------------------------------------------------
+enum logic [1:0] {
+	R0_IDLE														,
+	R0_AR														,
+	R0_R
+} shared_read_0_state											;
 
-// Create axil_if for every node
-axi_lite_if_20bit_addr #(AXI_ADDR_WIDTH, AXI_DATA_WIDTH, AXI_RESP_WIDTH) mnode_axil_if [IC_NUM_MASTER_SLOTS]();
-axi_lite_if_20bit_addr #(AXI_ADDR_WIDTH, AXI_DATA_WIDTH, AXI_RESP_WIDTH) snode_axil_if [IC_NUM_SLAVE_SLOTS] ();
+always @(posedge clk or negedge rst) begin
+	if (!rst) begin
+		shared_read_0.ssel_r 		<= '0						;
+		shared_read_0.msel_r 		<= '0 						;
+		shared_read_0.busy_r	 	<= '0 						;
+		shared_read_0_state			<= R0_IDLE					;
+	end else begin
+		case (shared_read_0_state)
+		R0_IDLE: begin
+			if (shared_read_0.busy) begin
+				shared_read_0.ssel_r 		<= shared_read_0.ssel;
+				shared_read_0.msel_r 		<= shared_read_0.msel;
+				shared_read_0.busy_r		<= '1;
+				shared_read_0_state			<= R0_AR;
+			end
+		end
+		R0_AR: begin
+			if (shared_read_0.ar_valid[shared_read_0.msel_r] && shared_read_0.ar_ready[shared_read_0.ssel_r]) begin
+				shared_read_0_state			<= R0_R;
+			end
+		end
+		R0_R: begin
+			if (shared_read_0.r_valid[shared_read_0.ssel_r] & shared_read_0.r_ready[shared_read_0.msel_r]) begin
+				shared_read_0.busy_r	 	<= '0				;
+				shared_read_0_state			<= R0_IDLE			;
+				if (shared_read_0.busy) begin
+					shared_read_0.ssel_r 	<= shared_read_0.ssel;
+					shared_read_0.msel_r 	<= shared_read_0.msel;
+					shared_read_0.busy_r	<= '1;
+					shared_read_0_state		<= R0_AR;
+				end
+			end
+		end
+		endcase
+	end
+end
 
-// Split interconnect's axilite interfaces with 'sp' and 'mp' modports into
-// node's axilite interfaces with corresponding channel modport,
-// which depends on node's type (mst/slv) and node's channel (read/write)
-// Splitting is needed to avoid multidriving of an interface from different nodes
+for (genvar mi = 0; mi < 20; mi++) begin : blabdflbdflgl
+	assign m[mi].r_valid	  =	shared_read_0.busy_r && mi == shared_read_0.msel_r ? shared_read_0.r_valid[shared_read_0.ssel_r] : '0;
+	assign m[mi].ar_ready	  =	shared_read_0.busy_r && mi == shared_read_0.msel_r ? shared_read_0.ar_ready[shared_read_0.ssel_r] : '0;
+end
+
+for (genvar si = 0; si < 12; si++) begin : sgfghghj
+	assign s[si].ar_valid	  =	shared_read_0_state == R0_AR && si == shared_read_0.ssel_r ? shared_read_0.ar_valid[shared_read_0.msel_r] : '0;
+	assign s[si].r_ready	  =	shared_read_0.busy_r && si == shared_read_0.ssel_r ? shared_read_0.r_ready[shared_read_0.msel_r] : '0;
+end
+
+assign shared_read_0.addr	  =	shared_read_0.ar_addr[shared_read_0.msel_r];
+assign shared_read_0.data	  =	shared_read_0.r_data[shared_read_0.ssel_r];
+assign shared_read_0.resp	  =	shared_read_0.r_resp[shared_read_0.ssel_r];	
+
+assign s[00].ar_addr		  =	shared_read_0.addr				;
+assign s[01].ar_addr		  =	shared_read_0.addr				;
+assign s[02].ar_addr		  =	shared_read_0.addr				;
+assign s[03].ar_addr		  =	shared_read_0.addr				;
+assign s[04].ar_addr		  =	shared_read_0.addr				;
+assign s[05].ar_addr		  =	shared_read_0.addr				;
+assign s[06].ar_addr		  =	shared_read_0.addr				;
+assign s[07].ar_addr		  =	shared_read_0.addr				;
+assign s[08].ar_addr		  =	shared_read_0.addr				;
+assign s[09].ar_addr		  =	shared_read_0.addr				;
+assign s[10].ar_addr		  =	shared_read_0.addr				;
+assign s[11].ar_addr		  =	shared_read_0.addr				;
+
+assign m[00].r_data			  =	shared_read_0.data				;
+assign m[01].r_data			  =	shared_read_0.data				;
+assign m[02].r_data			  =	shared_read_0.data				;
+assign m[03].r_data			  =	shared_read_0.data				;
+assign m[04].r_data			  =	shared_read_0.data				;
+assign m[05].r_data			  =	shared_read_0.data				;
+assign m[06].r_data			  =	shared_read_0.data				;
+assign m[07].r_data			  =	shared_read_0.data				;
+assign m[08].r_data			  =	shared_read_0.data				;
+assign m[09].r_data			  =	shared_read_0.data				;
+assign m[10].r_data			  =	shared_read_0.data				;
+assign m[11].r_data			  =	shared_read_0.data				;
+assign m[12].r_data			  =	shared_read_0.data				;
+assign m[13].r_data			  =	shared_read_0.data				;
+assign m[14].r_data			  =	shared_read_0.data				;
+assign m[15].r_data			  =	shared_read_0.data				;
+assign m[16].r_data			  =	shared_read_0.data				;
+assign m[17].r_data			  =	shared_read_0.data				;
+assign m[18].r_data			  =	shared_read_0.data				;
+assign m[19].r_data			  =	shared_read_0.data				;
+
+assign m[00].r_resp			  =	shared_read_0.resp				;
+assign m[01].r_resp			  =	shared_read_0.resp				;
+assign m[02].r_resp			  =	shared_read_0.resp				;
+assign m[03].r_resp			  =	shared_read_0.resp				;
+assign m[04].r_resp			  =	shared_read_0.resp				;
+assign m[05].r_resp			  =	shared_read_0.resp				;
+assign m[06].r_resp			  =	shared_read_0.resp				;
+assign m[07].r_resp			  =	shared_read_0.resp				;
+assign m[08].r_resp			  =	shared_read_0.resp				;
+assign m[09].r_resp			  =	shared_read_0.resp				;
+assign m[10].r_resp			  =	shared_read_0.resp				;
+assign m[11].r_resp			  =	shared_read_0.resp				;
+assign m[12].r_resp			  =	shared_read_0.resp				;
+assign m[13].r_resp			  =	shared_read_0.resp				;
+assign m[14].r_resp			  =	shared_read_0.resp				;
+assign m[15].r_resp			  =	shared_read_0.resp				;
+assign m[16].r_resp			  =	shared_read_0.resp				;
+assign m[17].r_resp			  =	shared_read_0.resp				;
+assign m[18].r_resp			  =	shared_read_0.resp				;
+assign m[19].r_resp			  =	shared_read_0.resp				;
+// —————————————————————————————————————————————————————————————
+// ————————————— mnw
+// —————————————————————————————————————————————————————————————
+struct															{
+// additional
+	logic	[11:0]				aw_ready						;
+	logic	[19:0]				aw_valid						;
+	logic	[11:0]				w_ready							;
+	logic	[19:0]				w_valid							;
+	logic	[19:0]				b_ready							;
+	logic	[11:0]				b_valid							;
+	logic	[31:0]				aw_addr					  [19:0];
+	logic	[3:0]				aw_qos					  [19:0];
+	logic	[31:0]				w_data					  [19:0];
+	logic	[1:0]				b_resp					  [11:0];
+	logic	[3:0]				w_strb					  [19:0];
+// main
+	logic	[4:0]				msel 							;
+	logic	[4:0]				msel_r 							;
+	logic	[3:0]				ssel							;
+	logic	[3:0]				ssel_r							;
+	logic	[31:0]				addr 							;
+	logic	[31:0]				data 							;
+	logic	[1:0]				resp 							;
+	logic	[3:0]				strb							;
+	logic						busy							;
+	logic						busy_r 							;
+} shared_write_0 												;
+
+for (genvar mi = 0; mi < 20; mi++) begin : shared_write_0_ar_valid$
+	assign shared_write_0.aw_addr[mi] = m[mi].aw_addr			;
+	assign shared_write_0.aw_valid[mi] = m[mi].aw_valid 		;
+	assign shared_write_0.aw_qos[mi] = m[mi].aw_qos				;
+	assign shared_write_0.b_ready[mi] = m[mi].b_ready			;
+	assign shared_write_0.w_valid[mi] = m[mi].w_valid 			;
+	assign shared_write_0.w_strb[mi] = m[mi].w_strb 			;
+	assign shared_write_0.w_data[mi] = m[mi].w_data				;
+end
+for (genvar si = 0; si < 12; si++) begin : shared_write_0_ar_valid$$
+	assign shared_write_0.w_ready[si] = s[si].w_ready 			;
+	assign shared_write_0.aw_ready[si] = s[si].aw_ready 		;
+	assign shared_write_0.b_resp[si] = s[si].b_resp				;
+	assign shared_write_0.b_valid[si] = s[si].b_valid			;
+end
+
+logic [19:0] msel_next_allowed									;
+always @(*) begin : shared_write_0_rqst_sel
+	shared_write_0.msel = '0									;
+	shared_write_0.ssel = '0									;
+	shared_write_0.busy = '0									;
+	for (logic [4:0] i = 0; i < 20; i = i + 1) begin : shared_write_0_rqst_gen
+		if (shared_write_0.aw_valid[i] && msel_next_allowed[i]) begin
+			shared_write_0.msel=	i							;
+			shared_write_0.ssel= shared_write_0.aw_addr[i][23:20];
+			shared_write_0.busy = '1							;
+			disable shared_write_0_rqst_sel						;
+		end
+	end
+end
+
+enum logic [1:0] {
+	W0_IDLE														,
+	W0_AW														,
+	W0_W														,
+	W0_B
+} shared_write_0_state											;
+
+always @(posedge clk or negedge rst) begin
+	if (!rst) begin
+		shared_write_0.ssel_r 		<= '0						;
+		shared_write_0.msel_r 		<= '0 						;
+		shared_write_0.busy_r	 	<= '0 						;
+		shared_write_0_state		<= W0_IDLE					;
+		msel_next_allowed			<= '1						;
+	end else begin
+		case (shared_write_0_state)
+		W0_IDLE: begin
+			if (shared_write_0.busy) begin
+				shared_write_0.ssel_r 	<= shared_write_0.ssel;
+				shared_write_0.msel_r 	<= shared_write_0.msel;
+				shared_write_0.busy_r	<= '1;
+				shared_write_0_state	<= W0_AW;
+				for (int i = 0; i < 20; i = i + 1)
+					msel_next_allowed[i] = shared_write_0.msel == 19 ? 1 : i > shared_write_0.msel ? 1 : 0;
+			end
+		end
+		W0_AW: begin
+			if (shared_write_0.aw_valid[shared_write_0.msel_r] && shared_write_0.aw_ready[shared_write_0.ssel_r]) begin
+				shared_write_0_state	<= W0_W;
+			end
+		end
+		W0_W: begin
+			if (shared_write_0.w_valid[shared_write_0.msel_r] & shared_write_0.w_ready[shared_write_0.ssel_r]) begin
+				shared_write_0_state	<= W0_B					;
+			end
+		end
+		W0_B: begin
+			if (shared_write_0.b_valid[shared_write_0.ssel_r] & shared_write_0.b_ready[shared_write_0.msel_r]) begin
+				shared_write_0.busy_r 	<= '0					;
+				shared_write_0_state	<= W0_IDLE				;
+				if (shared_write_0.busy) begin
+					shared_write_0.ssel_r 	<= shared_write_0.ssel;
+					shared_write_0.msel_r 	<= shared_write_0.msel;
+					shared_write_0.busy_r	<= '1;
+					shared_write_0_state	<= W0_AW;
+					for (int i = 0; i < 20; i = i + 1)
+						msel_next_allowed[i] = shared_write_0.msel == 19 ? 1 : i > shared_write_0.msel ? 1 : 0;
+				end
+			end
+		end
+		endcase
+	end
+end
+
+for (genvar mi = 0; mi < 20; mi++) begin : blabdflbdflglfgh
+	assign m[mi].aw_ready	  =	shared_write_0.busy_r && mi == shared_write_0.msel_r ? shared_write_0.aw_ready[shared_write_0.ssel_r] : '0;
+	assign m[mi].w_ready	  =	shared_write_0.busy_r && mi == shared_write_0.msel_r ? shared_write_0.w_ready[shared_write_0.ssel_r] : '0;
+	assign m[mi].b_valid	  =	shared_write_0.busy_r && mi == shared_write_0.msel_r ? shared_write_0.b_valid[shared_write_0.ssel_r] : '0;
+end
+
+for (genvar si = 0; si < 12; si++) begin : sgfghghjdfgh
+	assign s[si].aw_valid	  =	shared_write_0_state == W0_AW && si == shared_write_0.ssel_r ? shared_write_0.aw_valid[shared_write_0.msel_r] : '0;
+	assign s[si].w_valid	  =	shared_write_0_state == W0_W  && si == shared_write_0.ssel_r ? shared_write_0.w_valid[shared_write_0.msel_r] : '0;
+	assign s[si].b_ready	  =	shared_write_0.busy_r && si == shared_write_0.ssel_r ? shared_write_0.b_ready[shared_write_0.msel_r] : '0;
+end
+
+assign shared_write_0.addr	  =	shared_write_0.aw_addr[shared_write_0.msel_r];
+assign shared_write_0.strb	  =	shared_write_0.w_strb[shared_write_0.msel_r];
+assign shared_write_0.data	  =	shared_write_0.w_data[shared_write_0.msel_r];
+assign shared_write_0.resp	  =	shared_write_0.b_resp[shared_write_0.ssel_r];
+
+assign s[00].w_data			  =	shared_write_0.data				;
+assign s[01].w_data			  =	shared_write_0.data				;
+assign s[02].w_data			  =	shared_write_0.data				;
+assign s[03].w_data			  =	shared_write_0.data				;
+assign s[04].w_data			  =	shared_write_0.data				;
+assign s[05].w_data			  =	shared_write_0.data				;
+assign s[06].w_data			  =	shared_write_0.data				;
+assign s[07].w_data			  =	shared_write_0.data				;
+assign s[08].w_data			  =	shared_write_0.data				;
+assign s[09].w_data			  =	shared_write_0.data				;
+assign s[10].w_data			  =	shared_write_0.data				;
+assign s[11].w_data			  =	shared_write_0.data				;
+
+assign s[00].aw_addr		  =	shared_write_0.addr				;
+assign s[01].aw_addr		  =	shared_write_0.addr				;
+assign s[02].aw_addr		  =	shared_write_0.addr				;
+assign s[03].aw_addr		  =	shared_write_0.addr				;
+assign s[04].aw_addr		  =	shared_write_0.addr				;
+assign s[05].aw_addr		  =	shared_write_0.addr				;
+assign s[06].aw_addr		  =	shared_write_0.addr				;
+assign s[07].aw_addr		  =	shared_write_0.addr				;
+assign s[08].aw_addr		  =	shared_write_0.addr				;
+assign s[09].aw_addr		  =	shared_write_0.addr				;
+assign s[10].aw_addr		  =	shared_write_0.addr				;
+assign s[11].aw_addr		  =	shared_write_0.addr				;
+
+assign s[00].w_strb			  =	shared_write_0.strb				;
+assign s[01].w_strb			  =	shared_write_0.strb				;
+assign s[02].w_strb			  =	shared_write_0.strb				;
+assign s[03].w_strb			  =	shared_write_0.strb				;
+assign s[04].w_strb			  =	shared_write_0.strb				;
+assign s[05].w_strb			  =	shared_write_0.strb				;
+assign s[06].w_strb			  =	shared_write_0.strb				;
+assign s[07].w_strb			  =	shared_write_0.strb				;
+assign s[08].w_strb			  =	shared_write_0.strb				;
+assign s[09].w_strb			  =	shared_write_0.strb				;
+assign s[10].w_strb			  =	shared_write_0.strb				;
+assign s[11].w_strb			  =	shared_write_0.strb				;
+
+assign m[00].b_resp			  =	shared_write_0.resp				;
+assign m[01].b_resp			  =	shared_write_0.resp				;
+assign m[02].b_resp			  =	shared_write_0.resp				;
+assign m[03].b_resp			  =	shared_write_0.resp				;
+assign m[04].b_resp			  =	shared_write_0.resp				;
+assign m[05].b_resp			  =	shared_write_0.resp				;
+assign m[06].b_resp			  =	shared_write_0.resp				;
+assign m[07].b_resp			  =	shared_write_0.resp				;
+assign m[08].b_resp			  =	shared_write_0.resp				;
+assign m[09].b_resp			  =	shared_write_0.resp				;
+assign m[10].b_resp			  =	shared_write_0.resp				;
+assign m[11].b_resp			  =	shared_write_0.resp				;
+assign m[12].b_resp			  =	shared_write_0.resp				;
+assign m[13].b_resp			  =	shared_write_0.resp				;
+assign m[14].b_resp			  =	shared_write_0.resp				;
+assign m[15].b_resp			  =	shared_write_0.resp				;
+assign m[16].b_resp			  =	shared_write_0.resp				;
+assign m[17].b_resp			  =	shared_write_0.resp				;
+assign m[18].b_resp			  =	shared_write_0.resp				;
+assign m[19].b_resp			  =	shared_write_0.resp				;
+// —————————————————————————————————————————————————————————————
+// ————————————— inout
+// —————————————————————————————————————————————————————————————
 generate
-    for(genvar mst_idx = 0; mst_idx < IC_NUM_MASTER_SLOTS; mst_idx++) begin
-//        always_ff @(posedge clk_i) begin
-//         mnode_axil_if[mst_idx].ar_addr  <= mst_axil[mst_idx].ar_addr  ;
-//         mnode_axil_if[mst_idx].ar_valid <= mst_axil[mst_idx].ar_valid ;
-//         mnode_axil_if[mst_idx].r_ready  <= mst_axil[mst_idx].r_ready  ;
-//         mnode_axil_if[mst_idx].aw_addr  <= mst_axil[mst_idx].aw_addr  ;
-//         mnode_axil_if[mst_idx].aw_valid <= mst_axil[mst_idx].aw_valid ;
-//         mnode_axil_if[mst_idx].w_data   <= mst_axil[mst_idx].w_data   ;
-//         mnode_axil_if[mst_idx].w_strb   <= mst_axil[mst_idx].w_strb   ;
-//         mnode_axil_if[mst_idx].w_valid  <= mst_axil[mst_idx].w_valid  ;
-//         mnode_axil_if[mst_idx].b_ready  <= mst_axil[mst_idx].b_ready  ;
+	for(genvar mi = 0; mi < 20; mi++) begin
+		assign m[mi].ar_addr  = mst_axil[mi].ar_addr  ;
+		assign m[mi].ar_valid = mst_axil[mi].ar_valid ;
+		assign m[mi].r_ready  = mst_axil[mi].r_ready  ;
+		assign m[mi].aw_addr  = mst_axil[mi].aw_addr  ;
+		assign m[mi].aw_valid = mst_axil[mi].aw_valid ;
+		assign m[mi].w_data   = mst_axil[mi].w_data   ;
+		assign m[mi].w_strb   = mst_axil[mi].w_strb   ;
+		assign m[mi].w_valid  = mst_axil[mi].w_valid  ;
+		assign m[mi].b_ready  = mst_axil[mi].b_ready  ;
 
-//         mst_axil[mst_idx].ar_ready <= mnode_axil_if[mst_idx].ar_ready ;
-//         mst_axil[mst_idx].r_data   <= mnode_axil_if[mst_idx].r_data   ;
-//         mst_axil[mst_idx].r_resp   <= mnode_axil_if[mst_idx].r_resp   ;
-//         mst_axil[mst_idx].r_valid  <= mnode_axil_if[mst_idx].r_valid  ;
-//         mst_axil[mst_idx].aw_ready <= mnode_axil_if[mst_idx].aw_ready ;
-//         mst_axil[mst_idx].w_ready  <= mnode_axil_if[mst_idx].w_ready  ;
-//         mst_axil[mst_idx].b_resp   <= mnode_axil_if[mst_idx].b_resp   ;
-//         mst_axil[mst_idx].b_valid  <= mnode_axil_if[mst_idx].b_valid  ;
-//        end
+		assign mst_axil[mi].ar_ready = m[mi].ar_ready ;
+		assign mst_axil[mi].r_data   = m[mi].r_data   ;
+		assign mst_axil[mi].r_resp   = m[mi].r_resp   ;
+		assign mst_axil[mi].r_valid  = m[mi].r_valid  ;
+		assign mst_axil[mi].aw_ready = m[mi].aw_ready ;
+		assign mst_axil[mi].w_ready  = m[mi].w_ready  ;
+		assign mst_axil[mi].b_resp   = m[mi].b_resp   ;
+		assign mst_axil[mi].b_valid  = m[mi].b_valid  ;
+	end
+	for(genvar si = 0; si < 12; si++) begin
+		assign slv_axil[si].ar_addr  = s[si].ar_addr  ;
+		assign slv_axil[si].ar_valid = s[si].ar_valid ;
+		assign slv_axil[si].r_ready  = s[si].r_ready  ;
+		assign slv_axil[si].aw_addr  = s[si].aw_addr  ;
+		assign slv_axil[si].aw_valid = s[si].aw_valid ;
+		assign slv_axil[si].w_data   = s[si].w_data   ;
+		assign slv_axil[si].w_strb   = s[si].w_strb   ;
+		assign slv_axil[si].w_valid  = s[si].w_valid  ;
+		assign slv_axil[si].b_ready  = s[si].b_ready  ;
 
-        assign mnode_axil_if[mst_idx].ar_addr  = mst_axil[mst_idx].ar_addr[19:0]  ;
-        assign mnode_axil_if[mst_idx].ar_valid = mst_axil[mst_idx].ar_valid       ;
-        assign mnode_axil_if[mst_idx].r_ready  = mst_axil[mst_idx].r_ready        ;
-        assign mnode_axil_if[mst_idx].aw_addr  = mst_axil[mst_idx].aw_addr[19:0]  ;
-        assign mnode_axil_if[mst_idx].aw_valid = mst_axil[mst_idx].aw_valid       ;
-        assign mnode_axil_if[mst_idx].w_data   = mst_axil[mst_idx].w_data         ;
-        assign mnode_axil_if[mst_idx].w_strb   = mst_axil[mst_idx].w_strb         ;
-        assign mnode_axil_if[mst_idx].w_valid  = mst_axil[mst_idx].w_valid        ;
-        assign mnode_axil_if[mst_idx].b_ready  = mst_axil[mst_idx].b_ready        ;
-
-        assign mst_axil[mst_idx].ar_ready = mnode_axil_if[mst_idx].ar_ready       ;
-        assign mst_axil[mst_idx].r_data   = mnode_axil_if[mst_idx].r_data         ;
-        assign mst_axil[mst_idx].r_resp   = mnode_axil_if[mst_idx].r_resp         ;
-        assign mst_axil[mst_idx].r_valid  = mnode_axil_if[mst_idx].r_valid        ;
-        assign mst_axil[mst_idx].aw_ready = mnode_axil_if[mst_idx].aw_ready       ;
-        assign mst_axil[mst_idx].w_ready  = mnode_axil_if[mst_idx].w_ready        ;
-        assign mst_axil[mst_idx].b_resp   = mnode_axil_if[mst_idx].b_resp         ;
-        assign mst_axil[mst_idx].b_valid  = mnode_axil_if[mst_idx].b_valid        ;
-    end
-
-    for(genvar slv_idx = 0; slv_idx < IC_NUM_SLAVE_SLOTS; slv_idx++) begin
-        assign slv_axil[slv_idx].ar_addr  = {8'b0,IC_SLAVE_REGION_BASE[slv_idx][23:20],snode_axil_if[slv_idx].ar_addr[19:0]}  ;
-        assign slv_axil[slv_idx].ar_valid = snode_axil_if[slv_idx].ar_valid       ;
-        assign slv_axil[slv_idx].r_ready  = snode_axil_if[slv_idx].r_ready        ;
-        assign slv_axil[slv_idx].aw_addr  = {8'b0,IC_SLAVE_REGION_BASE[slv_idx][23:20],snode_axil_if[slv_idx].aw_addr[19:0]}  ;
-        assign slv_axil[slv_idx].aw_valid = snode_axil_if[slv_idx].aw_valid       ;
-        assign slv_axil[slv_idx].w_data   = snode_axil_if[slv_idx].w_data         ;
-        assign slv_axil[slv_idx].w_strb   = snode_axil_if[slv_idx].w_strb         ;
-        assign slv_axil[slv_idx].w_valid  = snode_axil_if[slv_idx].w_valid        ;
-        assign slv_axil[slv_idx].b_ready  = snode_axil_if[slv_idx].b_ready        ;
-
-        assign snode_axil_if[slv_idx].ar_ready = slv_axil[slv_idx].ar_ready       ;
-        assign snode_axil_if[slv_idx].r_data   = slv_axil[slv_idx].r_data         ;
-        assign snode_axil_if[slv_idx].r_resp   = slv_axil[slv_idx].r_resp         ;
-        assign snode_axil_if[slv_idx].r_valid  = slv_axil[slv_idx].r_valid        ;
-        assign snode_axil_if[slv_idx].aw_ready = slv_axil[slv_idx].aw_ready       ;
-        assign snode_axil_if[slv_idx].w_ready  = slv_axil[slv_idx].w_ready        ;
-        assign snode_axil_if[slv_idx].b_resp   = slv_axil[slv_idx].b_resp         ;
-        assign snode_axil_if[slv_idx].b_valid  = slv_axil[slv_idx].b_valid        ;
-    end
+		assign s[si].ar_ready = slv_axil[si].ar_ready ;
+		assign s[si].r_data   = slv_axil[si].r_data   ;
+		assign s[si].r_resp   = slv_axil[si].r_resp   ;
+		assign s[si].r_valid  = slv_axil[si].r_valid  ;
+		assign s[si].aw_ready = slv_axil[si].aw_ready ;
+		assign s[si].w_ready  = slv_axil[si].w_ready  ;
+		assign s[si].b_resp   = slv_axil[si].b_resp   ;
+		assign s[si].b_valid  = slv_axil[si].b_valid  ;
+	end
 endgenerate
-
-//-------------------------------------------------------------------------------
-// READ CROSSBAR
-//-------------------------------------------------------------------------------
-
-// Defines read crossbar for interconnect
-// Data tranfers when rdy(ready) and val(valid) on both sides is high(1)
-
-// Define read arrays of data bus for crossbar
-logic [IC_ARADDR_WIDTH-13    : 0] rnode_reqst_data [IC_NUM_MASTER_SLOTS];
-logic [IC_RDATA_WIDTH-1      : 0] rnode_resp_data  [IC_NUM_SLAVE_SLOTS ];
-
-// Define read master node request ports of crossbar 
-logic [IC_NUM_SLAVE_SLOTS-1  : 0] rmnode_reqst_rdy_i [IC_NUM_MASTER_SLOTS];
-logic [IC_NUM_SLAVE_SLOTS-1  : 0] rmnode_reqst_val_o [IC_NUM_MASTER_SLOTS];
-// Define read slave node request ports of crossbar 
-logic [IC_NUM_MASTER_SLOTS-1 : 0] rsnode_reqst_val_i [IC_NUM_SLAVE_SLOTS];
-logic [IC_NUM_MASTER_SLOTS-1 : 0] rsnode_reqst_rdy_o [IC_NUM_SLAVE_SLOTS];
-
-// Define read master node response ports of crossbar 
-logic [IC_NUM_SLAVE_SLOTS-1  : 0] rmnode_resp_val_i  [IC_NUM_MASTER_SLOTS];
-logic [IC_NUM_SLAVE_SLOTS-1  : 0] rmnode_resp_rdy_o  [IC_NUM_MASTER_SLOTS];
-// Define read slave node response ports of crossbar
-logic [IC_NUM_MASTER_SLOTS-1 : 0] rsnode_resp_val_o  [IC_NUM_SLAVE_SLOTS];
-logic [IC_NUM_MASTER_SLOTS-1 : 0] rsnode_resp_rdy_i  [IC_NUM_SLAVE_SLOTS];
-
-// Connect request and response ports
-generate
-    for(genvar mst_idx = 0; mst_idx < IC_NUM_MASTER_SLOTS; mst_idx++) begin : rnode_matrix_mst
-        for(genvar slv_idx = 0; slv_idx < IC_NUM_SLAVE_SLOTS; slv_idx++) begin : rnode_matrix_slv
-        
-            always_ff @(posedge clk_i) begin
-                 // Connect request read ports
-                 rsnode_reqst_val_i[slv_idx][mst_idx] = rmnode_reqst_val_o[mst_idx][slv_idx];
-                 rmnode_reqst_rdy_i[mst_idx][slv_idx] = rsnode_reqst_rdy_o[slv_idx][mst_idx];
-            end
-        
-//            // Connect request read ports
-//            assign rsnode_reqst_val_i[slv_idx][mst_idx] = rmnode_reqst_val_o[mst_idx][slv_idx];
-//            assign rmnode_reqst_rdy_i[mst_idx][slv_idx] = rsnode_reqst_rdy_o[slv_idx][mst_idx];
-            
-//            always_ff @(posedge clk_i) begin
-//                  // Connect response read ports
-//                 rmnode_resp_val_i[mst_idx][slv_idx]  = rsnode_resp_val_o[slv_idx][mst_idx];
-//                 rsnode_resp_rdy_i[slv_idx][mst_idx]  = rmnode_resp_rdy_o[mst_idx][slv_idx];
-//            end
-            
-            // Connect response read ports
-            assign rmnode_resp_val_i[mst_idx][slv_idx]  = rsnode_resp_val_o[slv_idx][mst_idx];
-            assign rsnode_resp_rdy_i[slv_idx][mst_idx]  = rmnode_resp_rdy_o[mst_idx][slv_idx];
-        end
-    end
-
-
-//-------------------------------------------------------------------------------
-// READ NODES
-//-------------------------------------------------------------------------------
-
-for(genvar mst_idx = 0; mst_idx < IC_NUM_MASTER_SLOTS; mst_idx++) begin : rd_mst_node_read
-    liteic_master_node_read node_wrap (
-        .clk_i             (clk_i                          ),
-        .rstn_i            (rstn_i                         ),
-        .mst_axil          (mnode_axil_if[mst_idx].sp_read ),
-        .rgn_select_i      (rgn_select_ar         [mst_idx]),
-        .illegal_addr_i    (illegal_addr_ar       [mst_idx]),
-        .cbar_reqst_rdy_i  (rmnode_reqst_rdy_i    [mst_idx]),
-        .cbar_reqst_val_o  (rmnode_reqst_val_o    [mst_idx]),
-        .cbar_reqst_data_o (rnode_reqst_data      [mst_idx]),
-        .cbar_resp_data_i  (rnode_resp_data                ),
-        .cbar_resp_val_i   (rmnode_resp_val_i     [mst_idx]),
-        .cbar_resp_rdy_o   (rmnode_resp_rdy_o     [mst_idx])
-    );
-end
-
-for(genvar slv_idx = 0; slv_idx < IC_NUM_SLAVE_SLOTS; slv_idx++) begin : rd_slv_node_read
-    liteic_slave_node_read node_wrap (
-        .clk_i             (clk_i                          ),
-        .rstn_i            (rstn_i                         ),
-        .slv_axil          (snode_axil_if[slv_idx].mp_read ),
-        .cbar_reqst_data_i (rnode_reqst_data               ),
-        .cbar_reqst_val_i  (rsnode_reqst_val_i    [slv_idx]),
-        .cbar_reqst_rdy_o  (rsnode_reqst_rdy_o    [slv_idx]),
-        .cbar_resp_rdy_i   (rsnode_resp_rdy_i     [slv_idx]),
-        .cbar_resp_val_o   (rsnode_resp_val_o     [slv_idx]),
-        .cbar_resp_data_o  (rnode_resp_data       [slv_idx])
-    );
-end
-endgenerate
-
-//-------------------------------------------------------------------------------
-// WRITE CROSSBAR
-//-------------------------------------------------------------------------------
-
-// Defines write crossbar for interconnect
-// Data tranfers when rdy(ready) and val(valid) on both sides is high(1)
-
-// Define write arrays of data bus for crossbar
-logic [IC_WDATA_WIDTH-1      : 0] wnode_w_reqst_data  [IC_NUM_MASTER_SLOTS];
-logic [IC_AWADDR_WIDTH-13    : 0] wnode_aw_reqst_data [IC_NUM_MASTER_SLOTS];
-logic [IC_BRESP_WIDTH-1      : 0] wnode_resp_data     [IC_NUM_SLAVE_SLOTS ];
-
-// Define data write master node request ports of crossbar 
-logic [IC_NUM_SLAVE_SLOTS-1  : 0] wmnode_w_reqst_rdy_i [IC_NUM_MASTER_SLOTS];
-logic [IC_NUM_SLAVE_SLOTS-1  : 0] wmnode_w_reqst_val_o [IC_NUM_MASTER_SLOTS];
-// Define data write slave node request ports of crossbar 
-logic [IC_NUM_MASTER_SLOTS-1 : 0] wsnode_w_reqst_val_i [IC_NUM_SLAVE_SLOTS];
-logic [IC_NUM_MASTER_SLOTS-1 : 0] wsnode_w_reqst_rdy_o [IC_NUM_SLAVE_SLOTS];
-
-// Define address write master node request ports of crossbar 
-logic [IC_NUM_SLAVE_SLOTS-1  : 0] wmnode_aw_reqst_rdy_i [IC_NUM_MASTER_SLOTS];
-logic [IC_NUM_SLAVE_SLOTS-1  : 0] wmnode_aw_reqst_val_o [IC_NUM_MASTER_SLOTS];
-// Define address write slave node request ports of crossbar 
-logic [IC_NUM_MASTER_SLOTS-1 : 0] wsnode_aw_reqst_val_i [IC_NUM_SLAVE_SLOTS];
-logic [IC_NUM_MASTER_SLOTS-1 : 0] wsnode_aw_reqst_rdy_o [IC_NUM_SLAVE_SLOTS];
-
-
-// Define write master node response ports of crossbar 
-logic [IC_NUM_SLAVE_SLOTS-1  : 0] wmnode_resp_val_i  [IC_NUM_MASTER_SLOTS];
-logic [IC_NUM_SLAVE_SLOTS-1  : 0] wmnode_resp_rdy_o  [IC_NUM_MASTER_SLOTS];
-// Define write slave node response ports of crossbar
-logic [IC_NUM_MASTER_SLOTS-1 : 0] wsnode_resp_val_o  [IC_NUM_SLAVE_SLOTS];
-logic [IC_NUM_MASTER_SLOTS-1 : 0] wsnode_resp_rdy_i  [IC_NUM_SLAVE_SLOTS];
-
-// Connect request and response ports
-generate
-    for(genvar mst_idx = 0; mst_idx < IC_NUM_MASTER_SLOTS; mst_idx++) begin : wnode_matrix_mst
-        for(genvar slv_idx = 0; slv_idx < IC_NUM_SLAVE_SLOTS; slv_idx++) begin : wnode_matrix_slv
-
-            always_ff @(posedge clk_i) begin
-                // Connect request address write ports
-                wsnode_aw_reqst_val_i[slv_idx][mst_idx] <= wmnode_aw_reqst_val_o[mst_idx][slv_idx];
-                wmnode_aw_reqst_rdy_i[mst_idx][slv_idx] <= wsnode_aw_reqst_rdy_o[slv_idx][mst_idx];
-            end
-            // Connect request address write ports
-//            assign wsnode_aw_reqst_val_i[slv_idx][mst_idx] = wmnode_aw_reqst_val_o[mst_idx][slv_idx];
-//            assign wmnode_aw_reqst_rdy_i[mst_idx][slv_idx] = wsnode_aw_reqst_rdy_o[slv_idx][mst_idx];
-            
-//            always_ff @(posedge clk_i) begin
-//            // Connect response write ports
-//             wmnode_resp_val_i[mst_idx][slv_idx]  <= wsnode_resp_val_o[slv_idx][mst_idx];
-//             wsnode_resp_rdy_i[slv_idx][mst_idx]  <= wmnode_resp_rdy_o[mst_idx][slv_idx];
-//            end
-            
-            // Connect response write ports
-            assign wmnode_resp_val_i[mst_idx][slv_idx]  = wsnode_resp_val_o[slv_idx][mst_idx];
-            assign wsnode_resp_rdy_i[slv_idx][mst_idx]  = wmnode_resp_rdy_o[mst_idx][slv_idx];
-            
-            
-            always_ff @(posedge clk_i) begin
-            // Connect request data write ports
-             wsnode_w_reqst_val_i[slv_idx][mst_idx] <= wmnode_w_reqst_val_o[mst_idx][slv_idx];
-             wmnode_w_reqst_rdy_i[mst_idx][slv_idx] <= wsnode_w_reqst_rdy_o[slv_idx][mst_idx];
-            end
-            
-    // Connect request data write ports
-    //            assign wsnode_w_reqst_val_i[slv_idx][mst_idx] = wmnode_w_reqst_val_o[mst_idx][slv_idx];
-    //            assign wmnode_w_reqst_rdy_i[mst_idx][slv_idx] = wsnode_w_reqst_rdy_o[slv_idx][mst_idx];
-        end
-    end
-
-//-------------------------------------------------------------------------------
-// WRITE NODES
-//-------------------------------------------------------------------------------
-
-for(genvar mst_idx = 0; mst_idx < IC_NUM_MASTER_SLOTS; mst_idx++) begin : wr_mst_node_write
-    liteic_master_node_write node_wrap (
-        .clk_i                (clk_i                           ),
-        .rstn_i               (rstn_i                          ),
-        .mst_axil             (mnode_axil_if[mst_idx].sp_write ),
-        .rgn_select_i         (rgn_select_aw         [mst_idx] ),
-        .illegal_addr_i       (illegal_addr_aw       [mst_idx] ),
-        .cbar_w_reqst_rdy_i   (wmnode_w_reqst_rdy_i  [mst_idx] ),
-        .cbar_w_reqst_val_o   (wmnode_w_reqst_val_o  [mst_idx] ),
-        .cbar_w_reqst_data_o  (wnode_w_reqst_data    [mst_idx] ),
-        .cbar_aw_reqst_rdy_i  (wmnode_aw_reqst_rdy_i [mst_idx] ),
-        .cbar_aw_reqst_val_o  (wmnode_aw_reqst_val_o [mst_idx] ),
-        .cbar_aw_reqst_data_o (wnode_aw_reqst_data   [mst_idx] ),
-        .cbar_resp_data_i     (wnode_resp_data                 ),
-        .cbar_resp_val_i      (wmnode_resp_val_i     [mst_idx] ),
-        .cbar_resp_rdy_o      (wmnode_resp_rdy_o     [mst_idx] )
-    );
-end
-
-for(genvar slv_idx = 0; slv_idx < IC_NUM_SLAVE_SLOTS; slv_idx++) begin : wr_slv_node_write
-    liteic_slave_node_write node_wrap (
-        .clk_i                (clk_i                           ),
-        .rstn_i               (rstn_i                          ),
-        .slv_axil             (snode_axil_if[slv_idx].mp_write ),
-        .cbar_w_reqst_data_i  (wnode_w_reqst_data              ),
-        .cbar_w_reqst_val_i   (wsnode_w_reqst_val_i  [slv_idx] ),
-        .cbar_w_reqst_rdy_o   (wsnode_w_reqst_rdy_o  [slv_idx] ),
-        .cbar_aw_reqst_data_i (wnode_aw_reqst_data             ),
-        .cbar_aw_reqst_val_i  (wsnode_aw_reqst_val_i [slv_idx] ),
-        .cbar_aw_reqst_rdy_o  (wsnode_aw_reqst_rdy_o [slv_idx] ),
-        .cbar_resp_rdy_i      (wsnode_resp_rdy_i     [slv_idx] ),
-        .cbar_resp_val_o      (wsnode_resp_val_o     [slv_idx] ),
-        .cbar_resp_data_o     (wnode_resp_data       [slv_idx] )
-    );
-end
-endgenerate
-
 endmodule
