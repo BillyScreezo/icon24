@@ -7,16 +7,20 @@ module liteic_master_node_read
     import liteic_pkg::IC_SLAVE_REGION_BASE;
     import liteic_pkg::IC_SLAVE_REGION_SIZE;
 (
-    input logic                                    clk_i,
-    input logic                                    rstn_i,
-    
+    input logic                               clk_i,
+    input logic                               rstn_i,
+
     // interconnect axi interface
-    axi_lite_if                                    mst_axil,
+    axi_lite_if_20bit_addr                    mst_axil,
+
+    // external decoding:
+    input  logic [ IC_NUM_SLAVE_SLOTS-1 : 0 ] rgn_select_i,   // region select
+    input  logic                              illegal_addr_i, // illegal address flag
 
     // interconnect crossbar matrix
     input  logic [ IC_NUM_SLAVE_SLOTS-1 : 0 ] cbar_reqst_rdy_i,
     output logic [ IC_NUM_SLAVE_SLOTS-1 : 0 ] cbar_reqst_val_o,
-    output logic [ IC_ARADDR_WIDTH-1    : 0 ] cbar_reqst_data_o,
+    output logic [ IC_ARADDR_WIDTH-13   : 0 ] cbar_reqst_data_o,
 
     input  logic [ IC_RDATA_WIDTH-1     : 0 ] cbar_resp_data_i [ IC_NUM_SLAVE_SLOTS ],
     input  logic [ IC_NUM_SLAVE_SLOTS-1 : 0 ] cbar_resp_val_i,
@@ -81,7 +85,7 @@ localparam NODE_SLAVE_ID_WIDTH    = $clog2(IC_NUM_SLAVE_SLOTS);
 // Handling node's connectivity to interconnect crossbar matrix
 logic [ NODE_NUM_SLAVE_SLOTS-1 : 0 ] node_arready_w;
 logic [ NODE_NUM_SLAVE_SLOTS-1 : 0 ] node_arvalid_w;
-logic [ IC_ARADDR_WIDTH-1      : 0 ] node_araddr_w;
+logic [ IC_ARADDR_WIDTH-13     : 0 ] node_araddr_w;
 logic [ IC_RDATA_WIDTH-1       : 0 ] node_rdata_w [ NODE_NUM_SLAVE_SLOTS ];
 logic [ NODE_NUM_SLAVE_SLOTS-1 : 0 ] node_rvalid_w;
 logic [ NODE_NUM_SLAVE_SLOTS-1 : 0 ] node_rready_w;
@@ -105,12 +109,15 @@ logic                               mst_rvalid_wo;
 logic [ IC_RDATA_WIDTH-1      : 0 ] mst_rdata_wo;
 
 logic                               mst_arvalid_wi;
-logic [ IC_ARADDR_WIDTH-1     : 0 ] mst_araddr_wi;
+logic [ IC_ARADDR_WIDTH-13    : 0 ] mst_araddr_wi;
 logic                               mst_arready_wo;
 
 //-------------------------------------------------------------------------------
 // = Reconnect and combine interfaces
 //-------------------------------------------------------------------------------
+
+assign slv_id_reqst_onehot = rgn_select_i;
+assign illegal_addr        = illegal_addr_i;
 
 assign mst_axil.ar_ready = mst_arready_wo;
 assign mst_arvalid_wi    = mst_axil.ar_valid;
@@ -246,18 +253,18 @@ end
 //-------------------------------------------------------------------------------
 
 // Checking the address for region ownership and issuing a region number(slave_id) as onehot and binary
-liteic_addr_decoder
-#(
-    .ADDR_WIDTH     (IC_ARADDR_WIDTH        ),
-    .NUM_REGIONS    (NODE_NUM_SLAVE_SLOTS   ),
-    .REGION_BASE    (NODE_SLAVE_REGION_BASE ),
-    .REGION_SIZE    (NODE_SLAVE_REGION_SIZE )
-)
-slave_addr_decoder (
-    .addr_i           (slv_araddr_wi        ),
-    .rgn_select_o     (slv_id_reqst_onehot  ),
-    .illegal_addr_o   (illegal_addr         )
-);
+//liteic_addr_decoder
+// #(
+//     .ADDR_WIDTH     (IC_ARADDR_WIDTH        ),
+//     .NUM_REGIONS    (NODE_NUM_SLAVE_SLOTS   ),
+//     .REGION_BASE    (NODE_SLAVE_REGION_BASE ),
+//     .REGION_SIZE    (NODE_SLAVE_REGION_SIZE )
+// )
+// slave_addr_decoder (
+//     .addr_i           (slv_araddr_wi        ),
+//     .rgn_select_o     (slv_id_reqst_onehot  ),
+//     .illegal_addr_o   (illegal_addr         )
+// );
 
 // This module is used, as a converter to binary value
 liteic_priority_cd_m #(.IN_WIDTH(IC_NUM_SLAVE_SLOTS), .OUT_WIDTH(NODE_SLAVE_ID_WIDTH)) 

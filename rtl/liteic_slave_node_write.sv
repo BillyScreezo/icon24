@@ -9,14 +9,14 @@ module liteic_slave_node_write
     input logic rstn_i,
 
     // interconnect i/o
-    axi_lite_if slv_axil,
+    axi_lite_if_20bit_addr slv_axil,
 
     // node matrix i/o
     input  logic [ IC_WDATA_WIDTH-1      : 0 ] cbar_w_reqst_data_i  [ IC_NUM_MASTER_SLOTS ],
     input  logic [ IC_NUM_MASTER_SLOTS-1 : 0 ] cbar_w_reqst_val_i,
     output logic [ IC_NUM_MASTER_SLOTS-1 : 0 ] cbar_w_reqst_rdy_o,
 
-    input  logic [ IC_AWADDR_WIDTH-1     : 0 ] cbar_aw_reqst_data_i  [ IC_NUM_MASTER_SLOTS ],
+    input  logic [ IC_AWADDR_WIDTH-13    : 0 ] cbar_aw_reqst_data_i  [ IC_NUM_MASTER_SLOTS ],
     input  logic [ IC_NUM_MASTER_SLOTS-1 : 0 ] cbar_aw_reqst_val_i,
     output logic [ IC_NUM_MASTER_SLOTS-1 : 0 ] cbar_aw_reqst_rdy_o,
 
@@ -66,7 +66,7 @@ localparam NODE_MASTER_ID_WIDTH   = $clog2(NODE_NUM_MASTER_SLOTS);
 logic [ IC_WDATA_WIDTH-1        : 0 ] node_wdata_w              [ NODE_NUM_MASTER_SLOTS ] ;
 logic [ NODE_NUM_MASTER_SLOTS-1 : 0 ] node_wvalid_w;
 logic [ NODE_NUM_MASTER_SLOTS-1 : 0 ] node_wready_w;
-logic [ IC_AWADDR_WIDTH-1       : 0 ] node_awaddr               [ NODE_NUM_MASTER_SLOTS ] ;
+logic [ IC_AWADDR_WIDTH-13      : 0 ] node_awaddr               [ NODE_NUM_MASTER_SLOTS ] ;
 logic [ NODE_NUM_MASTER_SLOTS-1 : 0 ] node_awvalid_w;
 logic [ NODE_NUM_MASTER_SLOTS-1 : 0 ] node_awready_w;
 logic [ NODE_NUM_MASTER_SLOTS-1 : 0 ] node_bready_w;
@@ -87,7 +87,7 @@ logic [ IC_WDATA_WIDTH-1 : 0   ] slv_wdata_wo;
 logic                            slv_wvalid_wo;
 logic                            slv_wready_wi;
 
-logic [ IC_AWADDR_WIDTH-1 : 0  ] slv_awaddr_wo;
+logic [ IC_AWADDR_WIDTH-13: 0  ] slv_awaddr_wo;
 logic                            slv_awvalid_wo;
 logic                            slv_awready_wi;
 
@@ -155,8 +155,8 @@ assign slv_awvalid_wo   = ((|(node_awvalid_w)) && (!aw_success_r));
 assign node_awready_w = (slv_awready_wi ) ? mst_id_reqst_onehot : '0;
 assign slv_awaddr_wo    = node_awaddr[mst_id_reqst];    // !
 
-// logic [IC_AWADDR_WIDTH-1:0] tmp_mux1_1 [5];
-// logic [IC_AWADDR_WIDTH-1:0] tmp_mux2_1;
+// logic [IC_AWADDR_WIDTH-13:0] tmp_mux1_1 [5];
+// logic [IC_AWADDR_WIDTH-13:0] tmp_mux2_1;
 
 // always_comb begin
 //     unique case ( mst_id_reqst[1:0] )

@@ -5,14 +5,14 @@ module liteic_slave_node_read
     import liteic_pkg::IC_RD_CONNECTIVITY;
 
 (
-    input logic                                    clk_i,
-    input logic                                    rstn_i,
-    
+    input logic                                clk_i,
+    input logic                                rstn_i,
+
     // interconnect i/o
-    axi_lite_if                                    slv_axil,
+    axi_lite_if_20bit_addr                     slv_axil,
 
     // node matrix i/o
-    input  logic [ IC_ARADDR_WIDTH-1     : 0 ] cbar_reqst_data_i  [ IC_NUM_MASTER_SLOTS ],
+    input  logic [ IC_ARADDR_WIDTH-13    : 0 ] cbar_reqst_data_i  [ IC_NUM_MASTER_SLOTS ],
     input  logic [ IC_NUM_MASTER_SLOTS-1 : 0 ] cbar_reqst_val_i,
     output logic [ IC_NUM_MASTER_SLOTS-1 : 0 ] cbar_reqst_rdy_o,
 
@@ -57,7 +57,7 @@ localparam NODE_MASTER_ID_WIDTH   = (NODE_NUM_MASTER_SLOTS == 1) ? 1 : $clog2(NO
 //-------------------------------------------------------------------------------
 
 // Handling node's connectivity to interconnect crossbar matrix
-logic [ IC_ARADDR_WIDTH-1       : 0  ] node_araddr_w [ NODE_NUM_MASTER_SLOTS ];
+logic [ IC_ARADDR_WIDTH-13      : 0  ] node_araddr_w [ NODE_NUM_MASTER_SLOTS ];
 logic [ NODE_NUM_MASTER_SLOTS-1 : 0  ] node_arvalid_w;
 logic [ NODE_NUM_MASTER_SLOTS-1 : 0  ] node_arready_w;
 logic [ NODE_NUM_MASTER_SLOTS-1 : 0  ] node_rready_w;
@@ -74,7 +74,7 @@ logic [ NODE_MASTER_ID_WIDTH-1 : 0 ] mst_id_reqst_prior_r;
 
 
 // Signals from/to AXI master
-logic [ IC_ARADDR_WIDTH-1      : 0 ] slv_araddr_wo;
+logic [ IC_ARADDR_WIDTH-13     : 0 ] slv_araddr_wo;
 logic                                slv_arvalid_wo;
 logic                                slv_arready_wi;
 
@@ -133,8 +133,8 @@ assign  slv_arvalid_wo = ((|(node_arvalid_w)) && (!ar_success_r));
 assign node_arready_w  = (slv_arready_wi) ? mst_id_reqst_onehot : '0;
 assign  slv_araddr_wo  = node_araddr_w[mst_id_reqst];   // !
 
-// logic [IC_ARADDR_WIDTH-1:0] tmp_mux1 [3];
-// logic [IC_ARADDR_WIDTH-1:0] tmp_mux2;
+// logic [IC_ARADDR_WIDTH-13:0] tmp_mux1 [3];
+// logic [IC_ARADDR_WIDTH-13:0] tmp_mux2;
 
 // always_comb begin
 //     unique case ( mst_id_reqst[2:0] )
@@ -173,8 +173,8 @@ assign  slv_araddr_wo  = node_araddr_w[mst_id_reqst];   // !
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// logic [IC_ARADDR_WIDTH-1:0] tmp_mux1 [5];
-// logic [IC_ARADDR_WIDTH-1:0] tmp_mux2;
+// logic [IC_ARADDR_WIDTH-13:0] tmp_mux1 [5];
+// logic [IC_ARADDR_WIDTH-13:0] tmp_mux2;
 
 // always_comb begin
 //     unique case ( mst_id_reqst[1:0] )

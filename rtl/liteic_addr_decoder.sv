@@ -14,7 +14,7 @@ for (genvar gi = 0; gi < NUM_REGIONS; gi++) begin : addr_region_range
     assign rgn_select_o[gi] = (addr_i[23:20] == REGION_BASE[gi][23:20]) && (~|addr_i[31:24]);
 //                              ( addr_i[23:20] >=  REGION_BASE[gi][23:20]                    ) &&
 //                              ( addr_i[23:20] <  (REGION_BASE[gi][23:20] + REGION_SIZE[gi][23:20]) )
-                         
+
 end
 
 assign illegal_addr_o = ~|( rgn_select_o );
