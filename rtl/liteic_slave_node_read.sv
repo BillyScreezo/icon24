@@ -130,8 +130,99 @@ assign mst_id_reqst_onehot = (!node_busy) ? mst_id_reqst_prior_onehot : mst_id_r
 // = AR channel = //
 
 assign  slv_arvalid_wo = ((|(node_arvalid_w)) && (!ar_success_r));
-assign node_arready_w  = (slv_arready_wi && (!ar_success_r)) ? mst_id_reqst_onehot : '0;
-assign  slv_araddr_wo  = node_araddr_w[mst_id_reqst]; 
+assign node_arready_w  = (slv_arready_wi) ? mst_id_reqst_onehot : '0;
+assign  slv_araddr_wo  = node_araddr_w[mst_id_reqst];   // !
+
+// logic [IC_ARADDR_WIDTH-1:0] tmp_mux1 [3];
+// logic [IC_ARADDR_WIDTH-1:0] tmp_mux2;
+
+// always_comb begin
+//     unique case ( mst_id_reqst[2:0] )
+//         3'b000:  tmp_mux1[0] = node_araddr_w[0];
+//         3'b001:  tmp_mux1[0] = node_araddr_w[1];
+//         3'b010:  tmp_mux1[0] = node_araddr_w[2];
+//         3'b011:  tmp_mux1[0] = node_araddr_w[3];
+//         3'b100:  tmp_mux1[0] = node_araddr_w[4];
+//         3'b101:  tmp_mux1[0] = node_araddr_w[5];
+//         3'b110:  tmp_mux1[0] = node_araddr_w[6];
+//         default: tmp_mux1[0] = node_araddr_w[7];
+//     endcase
+
+//     unique case ( mst_id_reqst[2:0] )
+//         3'b000:  tmp_mux1[1] = node_araddr_w[8];
+//         3'b001:  tmp_mux1[1] = node_araddr_w[9];
+//         3'b010:  tmp_mux1[1] = node_araddr_w[10];
+//         3'b011:  tmp_mux1[1] = node_araddr_w[11];
+//         3'b100:  tmp_mux1[1] = node_araddr_w[12];
+//         3'b101:  tmp_mux1[1] = node_araddr_w[13];
+//         3'b110:  tmp_mux1[1] = node_araddr_w[14];
+//         default: tmp_mux1[1] = node_araddr_w[15];
+//     endcase
+
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1[2] = node_araddr_w[16];
+//         2'b01:   tmp_mux1[2] = node_araddr_w[17];
+//         2'b10:   tmp_mux1[2] = node_araddr_w[18];
+//         default: tmp_mux1[2] = node_araddr_w[19];
+//     endcase
+// end
+
+// assign tmp_mux2 = mst_id_reqst[3] ? tmp_mux1[1] : tmp_mux1[0];
+
+// assign slv_araddr_wo = mst_id_reqst[4] ? tmp_mux1[2] : tmp_mux2;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// logic [IC_ARADDR_WIDTH-1:0] tmp_mux1 [5];
+// logic [IC_ARADDR_WIDTH-1:0] tmp_mux2;
+
+// always_comb begin
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1[0] = node_araddr_w[0];
+//         2'b01:   tmp_mux1[0] = node_araddr_w[1];
+//         2'b10:   tmp_mux1[0] = node_araddr_w[2];
+//         default: tmp_mux1[0] = node_araddr_w[3];
+//     endcase
+
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1[1] = node_araddr_w[4];
+//         2'b01:   tmp_mux1[1] = node_araddr_w[5];
+//         2'b10:   tmp_mux1[1] = node_araddr_w[6];
+//         default: tmp_mux1[1] = node_araddr_w[7];
+//     endcase
+
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1[2] = node_araddr_w[8];
+//         2'b01:   tmp_mux1[2] = node_araddr_w[9];
+//         2'b10:   tmp_mux1[2] = node_araddr_w[10];
+//         default: tmp_mux1[2] = node_araddr_w[11];
+//     endcase
+
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1[3] = node_araddr_w[12];
+//         2'b01:   tmp_mux1[3] = node_araddr_w[13];
+//         2'b10:   tmp_mux1[3] = node_araddr_w[14];
+//         default: tmp_mux1[3] = node_araddr_w[15];
+//     endcase
+
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1[4] = node_araddr_w[16];
+//         2'b01:   tmp_mux1[4] = node_araddr_w[17];
+//         2'b10:   tmp_mux1[4] = node_araddr_w[18];
+//         default: tmp_mux1[4] = node_araddr_w[19];
+//     endcase
+// end
+
+// always_comb begin
+//     unique case ( mst_id_reqst[3:2] )
+//         2'b00:   tmp_mux2 = tmp_mux1[0];
+//         2'b01:   tmp_mux2 = tmp_mux1[1];
+//         2'b10:   tmp_mux2 = tmp_mux1[2];
+//         default: tmp_mux2 = tmp_mux1[3];
+//     endcase
+// end
+
+// assign slv_araddr_wo = mst_id_reqst[4] ? tmp_mux1[4] : tmp_mux2;
 
 // = R channel = //
 
@@ -143,42 +234,48 @@ assign node_rdata_w  = slv_rdata_wi;
 // Save id of master, which sent the reqst
 //-------------------------------------------------------------------------------
 
-always_ff @(posedge clk_i or negedge rstn_i)
+always_ff @(posedge clk_i)
 if      (!rstn_i)                      mst_id_reqst_prior_onehot_r <= '0;
 else if (slv_arvalid_wo && !node_busy) mst_id_reqst_prior_onehot_r <= mst_id_reqst_prior_onehot;
-else                                   mst_id_reqst_prior_onehot_r <= mst_id_reqst_prior_onehot_r;
 
-always_ff @(posedge clk_i or negedge rstn_i)
+always_ff @(posedge clk_i)
 if      (!rstn_i)                      mst_id_reqst_prior_r <= '0;
 else if (slv_arvalid_wo && !node_busy) mst_id_reqst_prior_r <= mst_id_reqst_prior;
-else                                   mst_id_reqst_prior_r <= mst_id_reqst_prior_r;
 
 //-------------------------------------------------------------------------------
 // Flags of busy node
 //-------------------------------------------------------------------------------
 
-always_ff @(posedge clk_i or negedge rstn_i)
+always_ff @(posedge clk_i)
 if      (!rstn_i)                       node_busy <= 'b0;
 else if (slv_rvalid_wi & slv_rready_wo) node_busy <= 'b0;
 else if (|node_arvalid_w              ) node_busy <= 'b1;
-else                                    node_busy <= node_busy;
 
 //-------------------------------------------------------------------------------
 // Flags of success transactions
 //-------------------------------------------------------------------------------
 
-assign ar_success   = slv_arvalid_wo & slv_arready_wi;
-always_ff @(posedge clk_i or negedge rstn_i)
-if      (!rstn_i)                       ar_success_r <= 'b0;
-else if (slv_rvalid_wi & slv_rready_wo) ar_success_r <= 'b0;
-else                                    ar_success_r <= ar_success_r | ar_success;
+
+always_ff @(posedge clk_i)
+if      (!rstn_i)                         ar_success_r <= 'b0;
+else begin
+    if (slv_rvalid_wi & slv_rready_wo)   ar_success_r <= 'b0;
+    if (slv_arvalid_wo & slv_arready_wi) ar_success_r <= 'b1;
+end
+
+
+//assign ar_success   = slv_arvalid_wo & slv_arready_wi;
+//always_ff @(posedge clk_i)
+//if      (!rstn_i)                       ar_success_r <= 'b0;
+//else if (slv_rvalid_wi & slv_rready_wo) ar_success_r <= 'b0;
+//else                                    ar_success_r <= ar_success_r | ar_success;
 
 
 //-------------------------------------------------------------------------------
 // initializations units
 //-------------------------------------------------------------------------------
 
-liteic_priority_cd #(.IN_WIDTH(NODE_NUM_MASTER_SLOTS), .OUT_WIDTH(NODE_MASTER_ID_WIDTH)) 
+liteic_priority_cd_s #(.IN_WIDTH(NODE_NUM_MASTER_SLOTS), .OUT_WIDTH(NODE_MASTER_ID_WIDTH)) 
 master_reqst_priority_cd (
     .in     (node_arvalid_w           ),
     .onehot (mst_id_reqst_prior_onehot),

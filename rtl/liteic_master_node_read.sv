@@ -129,14 +129,70 @@ assign slv_araddr_wi = mst_axil.ar_addr;
 // = AR channel = //
 
 assign node_araddr_w  = mst_araddr_wi;
-assign mst_arready_wo = (ar_success_r && |(slv_id_reqst_onehot & node_arready_w) || illegal_addr );
+assign mst_arready_wo = (|(slv_id_reqst_onehot & node_arready_w) || illegal_addr );
 assign node_arvalid_w = (ar_success_r && mst_arvalid_wi && !illegal_addr) ? slv_id_reqst_onehot : '0;
 
 // = R channel = //
 
-assign mst_rdata_wo  = (illegal_addr) ? IC_RDATA_WIDTH'(IC_INVALID_ADDR_RESP) : node_rdata_w[slv_id_resp];
+// assign mst_rdata_wo  = node_rdata_w[slv_id_resp];   // !
 assign mst_rvalid_wo = (|(node_rvalid_w & slv_id_resp_onehot) || illegal_addr );
-assign node_rready_w = (mst_rready_wi && !illegal_addr) ? slv_id_resp_onehot : '0;
+assign node_rready_w = (mst_rready_wi) ? slv_id_resp_onehot : '0;
+
+logic [IC_RDATA_WIDTH-1:0] tmp_mux1 [2];
+
+always_comb begin
+    unique case ( slv_id_resp[2:0] )
+        3'b000:  tmp_mux1[0] = node_rdata_w[0];
+        3'b001:  tmp_mux1[0] = node_rdata_w[1];
+        3'b010:  tmp_mux1[0] = node_rdata_w[2];
+        3'b011:  tmp_mux1[0] = node_rdata_w[3];
+        3'b100:  tmp_mux1[0] = node_rdata_w[4];
+        3'b101:  tmp_mux1[0] = node_rdata_w[5];
+        3'b110:  tmp_mux1[0] = node_rdata_w[6];
+        default: tmp_mux1[0] = node_rdata_w[7];
+    endcase
+
+    unique case ( slv_id_resp[1:0] )
+        2'b00:   tmp_mux1[1] = node_rdata_w[8];
+        2'b01:   tmp_mux1[1] = node_rdata_w[9];
+        2'b10:   tmp_mux1[1] = node_rdata_w[10];
+        default: tmp_mux1[1] = node_rdata_w[11];
+    endcase
+end
+
+assign mst_rdata_wo = slv_id_resp[3] ? tmp_mux1[1] : tmp_mux1[0];
+
+///////////////////////////////////////////////////////////////////////////////////
+
+// logic [IC_RDATA_WIDTH-1:0] tmp_mux1 [2];
+// logic [IC_RDATA_WIDTH-1:0] tmp_mux2;
+
+// always_comb begin
+//     unique case ( slv_id_resp[1:0] )
+//         2'b00:   tmp_mux1[0] = node_rdata_w[0];
+//         2'b01:   tmp_mux1[0] = node_rdata_w[1];
+//         2'b10:   tmp_mux1[0] = node_rdata_w[2];
+//         default: tmp_mux1[0] = node_rdata_w[3];
+//     endcase
+
+//     unique case ( slv_id_resp[1:0] )
+//         2'b00:   tmp_mux1[1] = node_rdata_w[4];
+//         2'b01:   tmp_mux1[1] = node_rdata_w[5];
+//         2'b10:   tmp_mux1[1] = node_rdata_w[6];
+//         default: tmp_mux1[1] = node_rdata_w[7];
+//     endcase
+
+//     unique case ( slv_id_resp[1:0] )
+//         2'b00:   tmp_mux1[2] = node_rdata_w[8];
+//         2'b01:   tmp_mux1[2] = node_rdata_w[9];
+//         2'b10:   tmp_mux1[2] = node_rdata_w[10];
+//         default: tmp_mux1[2] = node_rdata_w[11];
+//     endcase
+// end
+
+// assign tmp_mux2 = slv_id_resp[2] ? tmp_mux1[1] : tmp_mux1[0];
+
+// assign mst_rdata_wo = slv_id_resp[3] ? tmp_mux1[2] : tmp_mux2;
 
 //-------------------------------------------------------------------------------
 // Reconnect crossbar, if nodes has no connection
@@ -165,20 +221,25 @@ endgenerate
 // Save id of slave, which sent the reqst
 //-------------------------------------------------------------------------------
 
-always_ff @(posedge clk_i or negedge rstn_i)
+always_ff @(posedge clk_i)
 if      (!rstn_i)                         slv_id_reqst_onehot_r <= '0;
 else if (mst_arvalid_wi & mst_arready_wo) slv_id_reqst_onehot_r <= slv_id_reqst_onehot;
-else                                      slv_id_reqst_onehot_r <= slv_id_reqst_onehot_r;
 
 //-------------------------------------------------------------------------------
 // Flags of success transactions
 //-------------------------------------------------------------------------------
 
-always_ff @(posedge clk_i or negedge rstn_i)
+always_ff @(posedge clk_i)
 if      (!rstn_i)                         ar_success_r <= '1;
-else if (mst_arvalid_wi & mst_arready_wo) ar_success_r <= '0;
-else if (mst_rvalid_wo  & mst_rready_wi ) ar_success_r <= '1;
-else                                      ar_success_r <= ar_success_r;
+else begin
+    if (mst_arready_wo) ar_success_r <= '0;
+    if (mst_rready_wi ) ar_success_r <= '1;
+end
+
+//always_ff @(posedge clk_i)
+//if      (!rstn_i)                         ar_success_r <= '1;
+//else if (mst_arvalid_wi & mst_arready_wo) ar_success_r <= '0;
+//else if (mst_rvalid_wo  & mst_rready_wi ) ar_success_r <= '1;
 
 //-------------------------------------------------------------------------------
 // initializations units
@@ -199,7 +260,7 @@ slave_addr_decoder (
 );
 
 // This module is used, as a converter to binary value
-liteic_priority_cd #(.IN_WIDTH(IC_NUM_SLAVE_SLOTS), .OUT_WIDTH(NODE_SLAVE_ID_WIDTH)) 
+liteic_priority_cd_m #(.IN_WIDTH(IC_NUM_SLAVE_SLOTS), .OUT_WIDTH(NODE_SLAVE_ID_WIDTH)) 
 slave_resp_priority_cd (
     .in     (slv_id_reqst_onehot_r  ),
     .onehot (slv_id_resp_onehot     ),

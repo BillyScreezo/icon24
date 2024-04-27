@@ -152,14 +152,117 @@ assign mst_id_reqst_onehot = (!node_busy) ? mst_id_reqst_prior_onehot : mst_id_r
 // = AW channel = //
  
 assign slv_awvalid_wo   = ((|(node_awvalid_w)) && (!aw_success_r));
-assign node_awready_w = (slv_awready_wi && (!aw_success_r)) ? mst_id_reqst_onehot : '0;
-assign slv_awaddr_wo    = node_awaddr[mst_id_reqst];
+assign node_awready_w = (slv_awready_wi ) ? mst_id_reqst_onehot : '0;
+assign slv_awaddr_wo    = node_awaddr[mst_id_reqst];    // !
+
+// logic [IC_AWADDR_WIDTH-1:0] tmp_mux1_1 [5];
+// logic [IC_AWADDR_WIDTH-1:0] tmp_mux2_1;
+
+// always_comb begin
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1_1[0] = node_awaddr[0];
+//         2'b01:   tmp_mux1_1[0] = node_awaddr[1];
+//         2'b10:   tmp_mux1_1[0] = node_awaddr[2];
+//         default: tmp_mux1_1[0] = node_awaddr[3];
+//     endcase
+
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1_1[1] = node_awaddr[4];
+//         2'b01:   tmp_mux1_1[1] = node_awaddr[5];
+//         2'b10:   tmp_mux1_1[1] = node_awaddr[6];
+//         default: tmp_mux1_1[1] = node_awaddr[7];
+//     endcase
+
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1_1[2] = node_awaddr[8];
+//         2'b01:   tmp_mux1_1[2] = node_awaddr[9];
+//         2'b10:   tmp_mux1_1[2] = node_awaddr[10];
+//         default: tmp_mux1_1[2] = node_awaddr[11];
+//     endcase
+
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1_1[3] = node_awaddr[12];
+//         2'b01:   tmp_mux1_1[3] = node_awaddr[13];
+//         2'b10:   tmp_mux1_1[3] = node_awaddr[14];
+//         default: tmp_mux1_1[3] = node_awaddr[15];
+//     endcase
+
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1_1[4] = node_awaddr[16];
+//         2'b01:   tmp_mux1_1[4] = node_awaddr[17];
+//         2'b10:   tmp_mux1_1[4] = node_awaddr[18];
+//         default: tmp_mux1_1[4] = node_awaddr[19];
+//     endcase
+// end
+
+// always_comb begin
+//     unique case ( mst_id_reqst[3:2] )
+//         2'b00:   tmp_mux2 = tmp_mux1_1[0];
+//         2'b01:   tmp_mux2 = tmp_mux1_1[1];
+//         2'b10:   tmp_mux2 = tmp_mux1_1[2];
+//         default: tmp_mux2 = tmp_mux1_1[3];
+//     endcase
+// end
+
+// assign slv_awaddr_wo = mst_id_reqst[4] ? tmp_mux1_1[4] : tmp_mux2;
 
 // = W channel = //
 
 assign slv_wvalid_wo  = (|(mst_id_reqst_onehot & node_wvalid_w)) && (!w_success_r);
-assign node_wready_w  = (slv_wready_wi && (!w_success_r)) ? mst_id_reqst_onehot : '0;
-assign slv_wdata_wo   = node_wdata_w[mst_id_reqst];
+assign node_wready_w  = (slv_wready_wi ) ? mst_id_reqst_onehot : '0;
+assign slv_wdata_wo   = node_wdata_w[mst_id_reqst];     // !
+
+// logic [IC_WDATA_WIDTH-1:0] tmp_mux1_2 [5];
+// logic [IC_WDATA_WIDTH-1:0] tmp_mux2_2;
+
+// always_comb begin
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1_2[0] = node_wdata_w[0];
+//         2'b01:   tmp_mux1_2[0] = node_wdata_w[1];
+//         2'b10:   tmp_mux1_2[0] = node_wdata_w[2];
+//         default: tmp_mux1_2[0] = node_wdata_w[3];
+//     endcase
+
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1_2[1] = node_wdata_w[4];
+//         2'b01:   tmp_mux1_2[1] = node_wdata_w[5];
+//         2'b10:   tmp_mux1_2[1] = node_wdata_w[6];
+//         default: tmp_mux1_2[1] = node_wdata_w[7];
+//     endcase
+
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1_2[2] = node_wdata_w[8];
+//         2'b01:   tmp_mux1_2[2] = node_wdata_w[9];
+//         2'b10:   tmp_mux1_2[2] = node_wdata_w[10];
+//         default: tmp_mux1_2[2] = node_wdata_w[11];
+//     endcase
+
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1_2[3] = node_wdata_w[12];
+//         2'b01:   tmp_mux1_2[3] = node_wdata_w[13];
+//         2'b10:   tmp_mux1_2[3] = node_wdata_w[14];
+//         default: tmp_mux1_2[3] = node_wdata_w[15];
+//     endcase
+
+//     unique case ( mst_id_reqst[1:0] )
+//         2'b00:   tmp_mux1_2[4] = node_wdata_w[16];
+//         2'b01:   tmp_mux1_2[4] = node_wdata_w[17];
+//         2'b10:   tmp_mux1_2[4] = node_wdata_w[18];
+//         default: tmp_mux1_2[4] = node_wdata_w[19];
+//     endcase
+// end
+
+// always_comb begin
+//     unique case ( mst_id_reqst[3:2] )
+//         2'b00:   tmp_mux2 = tmp_mux1_2[0];
+//         2'b01:   tmp_mux2 = tmp_mux1_2[1];
+//         2'b10:   tmp_mux2 = tmp_mux1_2[2];
+//         default: tmp_mux2 = tmp_mux1_2[3];
+//     endcase
+// end
+
+// assign slv_wdata_wo = mst_id_reqst[4] ? tmp_mux1_2[4] : tmp_mux2;
+
 
 // = B channel = //
 
@@ -171,47 +274,48 @@ assign node_bresp_w  = slv_bresp_wi;
 // Save id of master, which sent the reqst
 //-------------------------------------------------------------------------------
 
-always_ff @(posedge clk_i or negedge rstn_i)
+always_ff @(posedge clk_i)
 if      (!rstn_i)                      mst_id_reqst_prior_onehot_r <= '0;
 else if (slv_awvalid_wo && !node_busy) mst_id_reqst_prior_onehot_r <= mst_id_reqst_prior_onehot;
-else                                   mst_id_reqst_prior_onehot_r <= mst_id_reqst_prior_onehot_r;
 
-always_ff @(posedge clk_i or negedge rstn_i)
+always_ff @(posedge clk_i)
 if      (!rstn_i)                      mst_id_reqst_prior_r <= '0;
 else if (slv_awvalid_wo && !node_busy) mst_id_reqst_prior_r <= mst_id_reqst_prior;
-else                                   mst_id_reqst_prior_r <= mst_id_reqst_prior_r;
 
 //-------------------------------------------------------------------------------
 // Flags of busy node
 //-------------------------------------------------------------------------------
 
-always_ff @(posedge clk_i or negedge rstn_i)
+always_ff @(posedge clk_i)
 if      (!rstn_i)                       node_busy <= 'b0;
 else if (slv_bvalid_wi & slv_bready_wo) node_busy <= 'b0;
 else if (|node_awvalid_w              ) node_busy <= 'b1;
-else                                    node_busy <= node_busy;
 
 //-------------------------------------------------------------------------------
 // Flags of success transactions
 //-------------------------------------------------------------------------------
 
-assign aw_success   = slv_awvalid_wo && slv_awready_wi;
-always_ff @(posedge clk_i or negedge rstn_i)
+//assign aw_success   = slv_awvalid_wo && slv_awready_wi;
+always_ff @(posedge clk_i)
 if      (!rstn_i)                       aw_success_r <= 'b0;
-else if (slv_bvalid_wi & slv_bready_wo) aw_success_r <= 'b0;
-else                                    aw_success_r <= aw_success_r | aw_success;
+else begin
+    if (slv_bvalid_wi & slv_bready_wo) aw_success_r <= 'b0;
+    if(slv_awvalid_wo && slv_awready_wi) aw_success_r <= 'b1;
+end
 
-assign  w_success   =  slv_wvalid_wo &&  slv_wready_wi;
-always_ff @(posedge clk_i or negedge rstn_i)
+//assign  w_success   =  slv_wvalid_wo &&  slv_wready_wi;
+always_ff @(posedge clk_i)
 if      (!rstn_i)                       w_success_r <= 'b0;
-else if (slv_bvalid_wi & slv_bready_wo) w_success_r <= 'b0;
-else                                    w_success_r <= w_success_r | w_success;
+else begin
+    if (slv_bvalid_wi & slv_bready_wo) w_success_r <= 'b0;
+    if(slv_wvalid_wo & slv_wready_wi) w_success_r <= 'b1;
+end
 
 //-------------------------------------------------------------------------------
 // initializations units
 //-------------------------------------------------------------------------------
 
-liteic_priority_cd #(.IN_WIDTH(NODE_NUM_MASTER_SLOTS), .OUT_WIDTH(NODE_MASTER_ID_WIDTH)) 
+liteic_priority_cd_s #(.IN_WIDTH(NODE_NUM_MASTER_SLOTS), .OUT_WIDTH(NODE_MASTER_ID_WIDTH)) 
 master_aw_reqst_priority_cd (
     .in     (node_awvalid_w            ) ,
     .onehot (mst_id_reqst_prior_onehot ) ,

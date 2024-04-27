@@ -83,6 +83,27 @@ axi_lite_if #(AXI_ADDR_WIDTH, AXI_DATA_WIDTH, AXI_RESP_WIDTH) snode_axil_if [IC_
 // Splitting is needed to avoid multidriving of an interface from different nodes
 generate
     for(genvar mst_idx = 0; mst_idx < IC_NUM_MASTER_SLOTS; mst_idx++) begin
+//        always_ff @(posedge clk_i) begin
+//         mnode_axil_if[mst_idx].ar_addr  <= mst_axil[mst_idx].ar_addr  ;
+//         mnode_axil_if[mst_idx].ar_valid <= mst_axil[mst_idx].ar_valid ;
+//         mnode_axil_if[mst_idx].r_ready  <= mst_axil[mst_idx].r_ready  ;
+//         mnode_axil_if[mst_idx].aw_addr  <= mst_axil[mst_idx].aw_addr  ;
+//         mnode_axil_if[mst_idx].aw_valid <= mst_axil[mst_idx].aw_valid ;
+//         mnode_axil_if[mst_idx].w_data   <= mst_axil[mst_idx].w_data   ;
+//         mnode_axil_if[mst_idx].w_strb   <= mst_axil[mst_idx].w_strb   ;
+//         mnode_axil_if[mst_idx].w_valid  <= mst_axil[mst_idx].w_valid  ;
+//         mnode_axil_if[mst_idx].b_ready  <= mst_axil[mst_idx].b_ready  ;
+
+//         mst_axil[mst_idx].ar_ready <= mnode_axil_if[mst_idx].ar_ready ;
+//         mst_axil[mst_idx].r_data   <= mnode_axil_if[mst_idx].r_data   ;
+//         mst_axil[mst_idx].r_resp   <= mnode_axil_if[mst_idx].r_resp   ;
+//         mst_axil[mst_idx].r_valid  <= mnode_axil_if[mst_idx].r_valid  ;
+//         mst_axil[mst_idx].aw_ready <= mnode_axil_if[mst_idx].aw_ready ;
+//         mst_axil[mst_idx].w_ready  <= mnode_axil_if[mst_idx].w_ready  ;
+//         mst_axil[mst_idx].b_resp   <= mnode_axil_if[mst_idx].b_resp   ;
+//         mst_axil[mst_idx].b_valid  <= mnode_axil_if[mst_idx].b_valid  ;
+//        end
+        
         assign mnode_axil_if[mst_idx].ar_addr  = mst_axil[mst_idx].ar_addr  ;
         assign mnode_axil_if[mst_idx].ar_valid = mst_axil[mst_idx].ar_valid ;
         assign mnode_axil_if[mst_idx].r_ready  = mst_axil[mst_idx].r_ready  ;
@@ -154,9 +175,23 @@ logic [IC_NUM_MASTER_SLOTS-1 : 0] rsnode_resp_rdy_i  [IC_NUM_SLAVE_SLOTS];
 generate
     for(genvar mst_idx = 0; mst_idx < IC_NUM_MASTER_SLOTS; mst_idx++) begin : rnode_matrix_mst
         for(genvar slv_idx = 0; slv_idx < IC_NUM_SLAVE_SLOTS; slv_idx++) begin : rnode_matrix_slv
-            // Connect request read ports
-            assign rsnode_reqst_val_i[slv_idx][mst_idx] = rmnode_reqst_val_o[mst_idx][slv_idx];
-            assign rmnode_reqst_rdy_i[mst_idx][slv_idx] = rsnode_reqst_rdy_o[slv_idx][mst_idx];
+        
+            always_ff @(posedge clk_i) begin
+                 // Connect request read ports
+                 rsnode_reqst_val_i[slv_idx][mst_idx] = rmnode_reqst_val_o[mst_idx][slv_idx];
+                 rmnode_reqst_rdy_i[mst_idx][slv_idx] = rsnode_reqst_rdy_o[slv_idx][mst_idx];
+            end
+        
+//            // Connect request read ports
+//            assign rsnode_reqst_val_i[slv_idx][mst_idx] = rmnode_reqst_val_o[mst_idx][slv_idx];
+//            assign rmnode_reqst_rdy_i[mst_idx][slv_idx] = rsnode_reqst_rdy_o[slv_idx][mst_idx];
+            
+//            always_ff @(posedge clk_i) begin
+//                  // Connect response read ports
+//                 rmnode_resp_val_i[mst_idx][slv_idx]  = rsnode_resp_val_o[slv_idx][mst_idx];
+//                 rsnode_resp_rdy_i[slv_idx][mst_idx]  = rmnode_resp_rdy_o[mst_idx][slv_idx];
+//            end
+            
             // Connect response read ports
             assign rmnode_resp_val_i[mst_idx][slv_idx]  = rsnode_resp_val_o[slv_idx][mst_idx];
             assign rsnode_resp_rdy_i[slv_idx][mst_idx]  = rmnode_resp_rdy_o[mst_idx][slv_idx];
@@ -235,15 +270,36 @@ logic [IC_NUM_MASTER_SLOTS-1 : 0] wsnode_resp_rdy_i  [IC_NUM_SLAVE_SLOTS];
 generate
     for(genvar mst_idx = 0; mst_idx < IC_NUM_MASTER_SLOTS; mst_idx++) begin : wnode_matrix_mst
         for(genvar slv_idx = 0; slv_idx < IC_NUM_SLAVE_SLOTS; slv_idx++) begin : wnode_matrix_slv
-            // Connect request data write ports
-            assign wsnode_w_reqst_val_i[slv_idx][mst_idx] = wmnode_w_reqst_val_o[mst_idx][slv_idx];
-            assign wmnode_w_reqst_rdy_i[mst_idx][slv_idx] = wsnode_w_reqst_rdy_o[slv_idx][mst_idx];
+
+            always_ff @(posedge clk_i) begin
+                // Connect request address write ports
+                wsnode_aw_reqst_val_i[slv_idx][mst_idx] <= wmnode_aw_reqst_val_o[mst_idx][slv_idx];
+                wmnode_aw_reqst_rdy_i[mst_idx][slv_idx] <= wsnode_aw_reqst_rdy_o[slv_idx][mst_idx];
+            end
             // Connect request address write ports
-            assign wsnode_aw_reqst_val_i[slv_idx][mst_idx] = wmnode_aw_reqst_val_o[mst_idx][slv_idx];
-            assign wmnode_aw_reqst_rdy_i[mst_idx][slv_idx] = wsnode_aw_reqst_rdy_o[slv_idx][mst_idx];
+//            assign wsnode_aw_reqst_val_i[slv_idx][mst_idx] = wmnode_aw_reqst_val_o[mst_idx][slv_idx];
+//            assign wmnode_aw_reqst_rdy_i[mst_idx][slv_idx] = wsnode_aw_reqst_rdy_o[slv_idx][mst_idx];
+            
+//            always_ff @(posedge clk_i) begin
+//            // Connect response write ports
+//             wmnode_resp_val_i[mst_idx][slv_idx]  <= wsnode_resp_val_o[slv_idx][mst_idx];
+//             wsnode_resp_rdy_i[slv_idx][mst_idx]  <= wmnode_resp_rdy_o[mst_idx][slv_idx];
+//            end
+            
             // Connect response write ports
             assign wmnode_resp_val_i[mst_idx][slv_idx]  = wsnode_resp_val_o[slv_idx][mst_idx];
             assign wsnode_resp_rdy_i[slv_idx][mst_idx]  = wmnode_resp_rdy_o[mst_idx][slv_idx];
+            
+            
+            always_ff @(posedge clk_i) begin
+            // Connect request data write ports
+             wsnode_w_reqst_val_i[slv_idx][mst_idx] <= wmnode_w_reqst_val_o[mst_idx][slv_idx];
+             wmnode_w_reqst_rdy_i[mst_idx][slv_idx] <= wsnode_w_reqst_rdy_o[slv_idx][mst_idx];
+            end
+            
+    // Connect request data write ports
+    //            assign wsnode_w_reqst_val_i[slv_idx][mst_idx] = wmnode_w_reqst_val_o[mst_idx][slv_idx];
+    //            assign wmnode_w_reqst_rdy_i[mst_idx][slv_idx] = wsnode_w_reqst_rdy_o[slv_idx][mst_idx];
         end
     end
 

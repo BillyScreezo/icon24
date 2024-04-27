@@ -124,10 +124,10 @@ logic                                mst_awready_wo;
 logic                                illegal_addr;
 logic [1:0]                          in_st;
 logic [1:0]                          check;
-logic                                aw_success;
-logic                                w_success;
+//logic                                aw_success;
+//logic                                w_success;
 logic                                aw_success_r;
-logic                                w_success_r;
+//logic                                w_success_r;
 
 //-------------------------------------------------------------------------------
 // = Reconnect and combine interfaces
@@ -185,41 +185,68 @@ assign slv_id_reqst_onehot = aw_success_r ? slv_id_reqst_decod_onehot_r : slv_id
 // = W channel = //
 
 assign node_wdata_w   = mst_wdata_wi;
-assign mst_wready_wo  = (((!w_success_r) && (slv_id_reqst & node_wready_w)) || illegal_addr );
-assign node_wvalid_w  = ((!w_success_r) && mst_wvalid_wi && !illegal_addr) ? slv_id_reqst_onehot : '0;
+assign mst_wready_wo  = (((slv_id_reqst & node_wready_w)) || illegal_addr );
+assign node_wvalid_w  = ( mst_wvalid_wi && !illegal_addr) ? slv_id_reqst_onehot : '0;
 
 // = AW channel = //
 
 assign node_awaddr_w  = mst_awaddr_wi;
-assign mst_awready_wo = (((!aw_success_r) && (|(slv_id_reqst_decod_onehot & node_awready_w))) || illegal_addr );
+assign mst_awready_wo = (( (|(slv_id_reqst_decod_onehot & node_awready_w))) || illegal_addr );
 assign node_awvalid_w = ((!aw_success_r) && mst_awvalid_wi && !illegal_addr) ? slv_id_reqst_decod_onehot : '0;
 
 // = B channel = //
 
-assign mst_bresp_wo   = (illegal_addr) ? IC_BRESP_WIDTH'(IC_INVALID_ADDR_RESP) : node_bresp_w[slv_id_resp];
+// assign mst_bresp_wo   = node_bresp_w[slv_id_resp];  // !
 assign mst_bvalid_wo  = (|(node_bvalid_w & slv_id_resp_onehot) || illegal_addr );
 assign node_bready_w  = (mst_bready_wi && !illegal_addr) ? slv_id_resp_onehot : '0;
+
+logic [IC_BRESP_WIDTH-1:0] tmp_mux1 [2];
+
+always_comb begin
+    unique case ( slv_id_resp[2:0] )
+        3'b000:  tmp_mux1[0] = node_bresp_w[0];
+        3'b001:  tmp_mux1[0] = node_bresp_w[1];
+        3'b010:  tmp_mux1[0] = node_bresp_w[2];
+        3'b011:  tmp_mux1[0] = node_bresp_w[3];
+        3'b100:  tmp_mux1[0] = node_bresp_w[4];
+        3'b101:  tmp_mux1[0] = node_bresp_w[5];
+        3'b110:  tmp_mux1[0] = node_bresp_w[6];
+        default: tmp_mux1[0] = node_bresp_w[7];
+    endcase
+
+    unique case ( slv_id_resp[1:0] )
+        2'b00:   tmp_mux1[1] = node_bresp_w[8];
+        2'b01:   tmp_mux1[1] = node_bresp_w[9];
+        2'b10:   tmp_mux1[1] = node_bresp_w[10];
+        default: tmp_mux1[1] = node_bresp_w[11];
+    endcase
+end
+
+assign mst_bresp_wo = slv_id_resp[3] ? tmp_mux1[1] : tmp_mux1[0];
 
 //-------------------------------------------------------------------------------
 // Registers
 //-------------------------------------------------------------------------------
 
-always_ff @(posedge clk_i or negedge rstn_i)
+always_ff @(posedge clk_i)
 if      (!rstn_i)                          slv_id_reqst_decod_onehot_r <= '0;
 else if (mst_awvalid_wi && mst_awready_wo) slv_id_reqst_decod_onehot_r <= slv_id_reqst_decod_onehot;
-else                                       slv_id_reqst_decod_onehot_r <= slv_id_reqst_decod_onehot_r;
 
-assign aw_success  = mst_awvalid_wi && mst_awready_wo;
-always_ff @(posedge clk_i or negedge rstn_i)
+//assign aw_success  = mst_awvalid_wi && mst_awready_wo;
+always_ff @(posedge clk_i)
 if      (!rstn_i)                         aw_success_r <= 'b0;
-else if (mst_bvalid_wo &&  mst_bready_wi) aw_success_r <= 'b0;
-else                                      aw_success_r <= aw_success_r | aw_success;
+else begin
+    if (mst_bready_wi)  aw_success_r <= 'b0;
+    if (mst_awready_wo) aw_success_r <= 'b1;
+end
 
-assign  w_success  =  mst_wvalid_wi &&  mst_wready_wo;
-always_ff @(posedge clk_i or negedge rstn_i)
-if      (!rstn_i)                         w_success_r <= 'b0;
-else if (mst_bvalid_wo &&  mst_bready_wi) w_success_r <= 'b0;
-else                                      w_success_r <= w_success_r | w_success;
+////assign  w_success  =  mst_wvalid_wi &&  mst_wready_wo;
+//always_ff @(posedge clk_i)
+//if      (!rstn_i)                         w_success_r <= 'b0;
+//else begin
+//    if (mst_bready_wi)  w_success_r <= 'b0;
+//    if (mst_wready_wo)  w_success_r <= 'b1;
+//end
 
 
 
@@ -242,7 +269,7 @@ slave_addr_decoder (
 );
 
 // This module is used, as a converter to binary value
-liteic_priority_cd #(.IN_WIDTH(IC_NUM_SLAVE_SLOTS), .OUT_WIDTH(NODE_SLAVE_ID_WIDTH)) 
+liteic_priority_cd_m #(.IN_WIDTH(IC_NUM_SLAVE_SLOTS), .OUT_WIDTH(NODE_SLAVE_ID_WIDTH)) 
 slave_resp_priority_cd (
     .in     (slv_id_reqst_decod_onehot_r  ),
     .onehot (slv_id_resp_onehot           ),
